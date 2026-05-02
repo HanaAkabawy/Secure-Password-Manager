@@ -49,8 +49,9 @@ def generatekeypair(q, a):
     pub = pow(a,priv,q)
     return (pub,priv) 
 
-def init():
-    q = generateprime(1024)
+def init(bits=1024):
+    print(f"Generating {bits}-bit safe prime (this may take a while)...")
+    q = generateprime(bits)
     a = generatea(q) 
     pub,priv = generatekeypair(q,a)
     return (q,a,pub,priv)

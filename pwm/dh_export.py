@@ -82,6 +82,8 @@ def build_export_package(
     my_elgamal_pub,
     q: int,
     alpha: int,
+    elgamal_p: int,
+    elgamal_alpha: int
 ) -> dict:
     from pwm.vault import construct_key
     master_key = construct_key(master_password)
@@ -98,7 +100,7 @@ def build_export_package(
     session_tag = session_blob[-16:]
     session_ciphertext = session_blob[16:-16]
     
-    r, s = sign_vault(session_ciphertext, int(my_elgamal_priv), q, alpha)
+    r, s = sign_vault(session_ciphertext, int(my_elgamal_priv), elgamal_p, elgamal_alpha)
     
     return {
         "sender_dh_pub": hex(my_dh_pub),
@@ -115,9 +117,10 @@ def consume_export_package(
     peer_elgamal_pub,
     new_master_password: str,
     output_vault_path: str,
-    my_elgamal_priv,
     q: int,
     alpha: int,
+    peer_elgamal_p: int,
+    peer_elgamal_alpha: int
 ) -> None:
     from pwm.vault import construct_key
     
@@ -127,7 +130,7 @@ def consume_export_package(
     sig_r = int(package["signature"]["r"])
     sig_s = int(package["signature"]["s"])
     
-    if not verify_vault(session_ciphertext, (sig_r, sig_s), int(peer_elgamal_pub), q, alpha):
+    if not verify_vault(session_ciphertext, (sig_r, sig_s), int(peer_elgamal_pub), peer_elgamal_p, peer_elgamal_alpha):
         raise SignatureVerificationError("Export package signature is invalid or tampered!")
         
     peer_dh_pub = int(package["sender_dh_pub"], 16)
@@ -140,6 +143,3 @@ def consume_export_package(
     
     master_key = construct_key(new_master_password)
     _encrypt_and_save(output_vault_path, entries, master_key)
-
-
-

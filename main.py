@@ -24,14 +24,16 @@ def load_or_generate_dh_params():
     return load_dh_params("pwm/dh_params.json")
 
 def load_public(path):
-    if not os.path.exists(path): return 0
+    if not os.path.exists(path): return 0, 0, 0
     with open(path, "r") as f:
-        return json.load(f)["publicKey"]
+        data = json.load(f)
+        return data["publicKey"], data["Prime"], data["Primitive Root"]
 
 def load_private(path):
-    if not os.path.exists(path): return 0
+    if not os.path.exists(path): return 0, 0, 0
     with open(path, "r") as f:
-        return json.load(f)["privateKey"]
+        data = json.load(f)
+        return data["privateKey"], data["Prime"], data["Primitive Root"]
 
 def main():
     if len(sys.argv) < 2:
@@ -70,13 +72,6 @@ def main():
             print(f"\n--- {user.capitalize()}'s Vault ---")
             for c in all_creds:
                 print(f"[{c['website']}] {c['username']}: {c['password']}")
-        elif command == "retrieve":
-            user, site = sys.argv[2], sys.argv[3]
-            path = f"{user}_vault.json"
-            pw = get_password()
-            matches = retrieve_credential(path, pw, site)
-            for m in matches:
-                print(f"Site: {m['website']} | User: {m['username']} | Pass: {m['password']}")
 
         elif command == "update":
             user, site, uname, new_pword = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
@@ -95,7 +90,8 @@ def main():
             elgamal_priv_path = f"{user}_elgamal_priv.json"
             elgamal_pub_path = f"{user}_elgamal_pub.json"
             if not os.path.exists(elgamal_priv_path):
-                q_el, a_el, pub, priv = generate_elgamal_params()
+                bits = int(os.environ.get("TEST_KEY_SIZE", 1024))
+                q_el, a_el, pub, priv = generate_elgamal_params(bits)
                 with open(elgamal_pub_path, "w") as f:
                     json.dump({"Prime": q_el, "Primitive Root": a_el, "publicKey": pub}, f, indent=4)
                 with open(elgamal_priv_path, "w") as f:
@@ -108,8 +104,8 @@ def main():
             with open(f"{user}_dh_priv.key", "w") as f:
                 f.write(str(dh_priv))
             
-            elgamal_priv = load_private(elgamal_priv_path)
-            sig = sign_dh_public(dh_pub, elgamal_priv, q, alpha)
+            elgamal_priv, el_q, el_alpha = load_private(elgamal_priv_path)
+            sig = sign_dh_public(dh_pub, elgamal_priv, el_q, el_alpha)
             
             offer = {
                 "dh_pub": hex(dh_pub),
@@ -135,9 +131,9 @@ def main():
             peer_dh_pub = int(peer_offer["dh_pub"], 16)
             peer_sig = peer_offer["signature"]
             
-            peer_elgamal_pub = load_public(peer_elgamal_pub_file)
+            peer_elgamal_pub, peer_el_q, peer_el_alpha = load_public(peer_elgamal_pub_file)
             
-            if not verify_dh_public(peer_dh_pub, peer_sig, peer_elgamal_pub, q, alpha):
+            if not verify_dh_public(peer_dh_pub, peer_sig, peer_elgamal_pub, peer_el_q, peer_el_alpha):
                 print("Peer DH offer signature is INVALID. Aborting.")
                 return
                 
@@ -145,8 +141,8 @@ def main():
             
             # Compute our own DH public to include in package
             dh_pub = pow(alpha, dh_priv, q)
-            elgamal_priv = load_private(elgamal_priv_path)
-            elgamal_pub = load_public(elgamal_pub_path)
+            elgamal_priv, el_q, el_alpha = load_private(elgamal_priv_path)
+            elgamal_pub, _, _ = load_public(elgamal_pub_path)
             
             pw = get_password()
             
@@ -159,7 +155,9 @@ def main():
                 my_elgamal_priv=elgamal_priv,
                 my_elgamal_pub=elgamal_pub,
                 q=q,
-                alpha=alpha
+                alpha=alpha,
+                elgamal_p=el_q,
+                elgamal_alpha=el_alpha
             )
             with open(f"{user}_vault_export.json", "w") as f:
                 json.dump(pkg, f, indent=2)
@@ -170,7 +168,6 @@ def main():
             export_file = sys.argv[3]
             sender_elgamal_pub_file = sys.argv[4]
             
-            elgamal_priv_path = f"{user}_elgamal_priv.json"
             dh_priv_path = f"{user}_dh_priv.key"
             out_vault_path = f"{user}_vault.json"
             
@@ -179,8 +176,7 @@ def main():
             with open(export_file) as f: pkg = json.load(f)
             with open(dh_priv_path) as f: dh_priv = int(f.read().strip())
             
-            sender_elgamal_pub = load_public(sender_elgamal_pub_file)
-            elgamal_priv = load_private(elgamal_priv_path)
+            sender_elgamal_pub, peer_el_q, peer_el_alpha = load_public(sender_elgamal_pub_file)
             
             print(f"Importing vault. You will define a new password for the local copy.")
             pw = get_password()
@@ -191,9 +187,10 @@ def main():
                 peer_elgamal_pub=sender_elgamal_pub,
                 new_master_password=pw,
                 output_vault_path=out_vault_path,
-                my_elgamal_priv=elgamal_priv,
                 q=q,
-                alpha=alpha
+                alpha=alpha,
+                peer_elgamal_p=peer_el_q,
+                peer_elgamal_alpha=peer_el_alpha
             )
             print(f"Vault successfully imported to {out_vault_path}")
 
