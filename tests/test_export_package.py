@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from pwm.dh_export import (
     generate_dh_params, generate_dh_keypair,
-    build_export_package, consume_export_package
+    build_export_package, consume_export_package, save_dh_params
 )
 from pwm.vault import create_vault, add_credential, list_credentials
 from pwm._mock_elgamal import generate_keypair
@@ -14,6 +14,7 @@ def test_export_package():
     print("Testing export/import package...")
     
     q, alpha = generate_dh_params(512)
+    save_dh_params(q, alpha, "pwm/dh_params.json")
     
     sender_vault_path = "sender_test_vault.json"
     receiver_vault_path = "receiver_test_vault.json"
@@ -56,7 +57,8 @@ def test_export_package():
         new_master_password="receiver_master",
         output_vault_path=receiver_vault_path,
         my_elgamal_priv=receiver_priv,
-        q=q
+        q=q,
+        alpha=alpha
     )
     
     # Verify received vault
@@ -74,4 +76,6 @@ def test_export_package():
 
 if __name__ == "__main__":
     test_export_package()
+
+
 

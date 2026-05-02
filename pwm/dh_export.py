@@ -2,7 +2,7 @@ import json
 import secrets
 import hashlib
 from pwm.vault import aes_gcm_encrypt, aes_gcm_decrypt, _decrypt_credentials, _encrypt_and_save
-from pwm._mock_elgamal import sign, verify
+from pwm.signatures import sign_vault, verify_vault
 
 def is_prime(n, k=40):
     if n == 2 or n == 3: return True
@@ -58,15 +58,16 @@ def derive_session_key(shared_secret: int) -> bytes:
     secret_bytes = shared_secret.to_bytes(byte_length, byteorder='big')
     return hashlib.sha256(secret_bytes).digest()
 
-def sign_dh_public(dh_public: int, elgamal_priv) -> bytes:
+def sign_dh_public(dh_public: int, elgamal_priv, p: int, alpha: int) -> dict:
     byte_length = (dh_public.bit_length() + 7) // 8
     msg_bytes = dh_public.to_bytes(byte_length, byteorder='big')
-    return sign(msg_bytes, elgamal_priv)
+    r, s = sign_vault(msg_bytes, int(elgamal_priv), p, alpha)
+    return {"r": r, "s": s}
 
-def verify_dh_public(dh_public: int, signature: bytes, elgamal_pub) -> bool:
+def verify_dh_public(dh_public: int, signature: dict, elgamal_pub, p: int, alpha: int) -> bool:
     byte_length = (dh_public.bit_length() + 7) // 8
     msg_bytes = dh_public.to_bytes(byte_length, byteorder='big')
-    return verify(msg_bytes, signature, elgamal_pub)
+    return verify_vault(msg_bytes, (int(signature["r"]), int(signature["s"])), int(elgamal_pub), p, alpha)
 
 class SignatureVerificationError(Exception):
     pass
@@ -97,7 +98,7 @@ def build_export_package(
     session_tag = session_blob[-16:]
     session_ciphertext = session_blob[16:-16]
     
-    signature = sign(session_ciphertext, my_elgamal_priv)
+    r, s = sign_vault(session_ciphertext, int(my_elgamal_priv), q, alpha)
     
     return {
         "sender_dh_pub": hex(my_dh_pub),
@@ -105,7 +106,7 @@ def build_export_package(
         "session_ciphertext_hex": session_ciphertext.hex(),
         "session_nonce_hex": session_nonce.hex(),
         "session_tag_hex": session_tag.hex(),
-        "signature_hex": signature.hex()
+        "signature": {"r": r, "s": s}
     }
 
 def consume_export_package(
@@ -116,15 +117,17 @@ def consume_export_package(
     output_vault_path: str,
     my_elgamal_priv,
     q: int,
+    alpha: int,
 ) -> None:
     from pwm.vault import construct_key
     
     session_ciphertext = bytes.fromhex(package["session_ciphertext_hex"])
     session_nonce = bytes.fromhex(package["session_nonce_hex"])
     session_tag = bytes.fromhex(package["session_tag_hex"])
-    signature = bytes.fromhex(package["signature_hex"])
+    sig_r = int(package["signature"]["r"])
+    sig_s = int(package["signature"]["s"])
     
-    if not verify(session_ciphertext, signature, peer_elgamal_pub):
+    if not verify_vault(session_ciphertext, (sig_r, sig_s), int(peer_elgamal_pub), q, alpha):
         raise SignatureVerificationError("Export package signature is invalid or tampered!")
         
     peer_dh_pub = int(package["sender_dh_pub"], 16)
@@ -137,4 +140,6 @@ def consume_export_package(
     
     master_key = construct_key(new_master_password)
     _encrypt_and_save(output_vault_path, entries, master_key)
+
+
 

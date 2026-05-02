@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from pwm.dh_export import (
     generate_dh_params, generate_dh_keypair,
     build_export_package, consume_export_package,
-    SignatureVerificationError
+    SignatureVerificationError, save_dh_params
 )
 from pwm.vault import create_vault, add_credential
 from pwm._mock_elgamal import generate_keypair
@@ -15,6 +15,7 @@ from pwm._mock_elgamal import generate_keypair
 def test_tamper_package():
     print("Testing tamper package...")
     q, alpha = generate_dh_params(512)
+    save_dh_params(q, alpha, "pwm/dh_params.json")
     
     sender_vault_path = "sender_test_vault2.json"
     receiver_vault_path = "receiver_test_vault2.json"
@@ -57,7 +58,8 @@ def test_tamper_package():
             new_master_password="receiver_master",
             output_vault_path=receiver_vault_path,
             my_elgamal_priv=receiver_priv,
-            q=q
+            q=q,
+            alpha=alpha
         )
         assert False, "Tampered package should have thrown an exception!"
     except SignatureVerificationError:
@@ -70,4 +72,6 @@ def test_tamper_package():
 
 if __name__ == "__main__":
     test_tamper_package()
+
+
 

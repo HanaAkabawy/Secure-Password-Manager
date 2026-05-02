@@ -89,11 +89,11 @@ def main():
                 f.write(str(dh_priv))
             
             elgamal_priv = load_private(elgamal_priv_path)
-            sig = sign_dh_public(dh_pub, elgamal_priv)
+            sig = sign_dh_public(dh_pub, elgamal_priv, q, alpha)
             
             offer = {
                 "dh_pub": hex(dh_pub),
-                "signature": sig.hex()
+                "signature": sig
             }
             with open(f"{user}_dh_offer.json", "w") as f:
                 json.dump(offer, f, indent=2)
@@ -109,17 +109,18 @@ def main():
             elgamal_pub_path = f"{user}_elgamal_pub.key"
             dh_priv_path = f"{user}_dh_priv.key"
             
+            q, alpha = load_or_generate_dh_params()
+            
             with open(peer_offer_file) as f: peer_offer = json.load(f)
             peer_dh_pub = int(peer_offer["dh_pub"], 16)
-            peer_sig = bytes.fromhex(peer_offer["signature"])
+            peer_sig = peer_offer["signature"]
             
             peer_elgamal_pub = load_public(peer_elgamal_pub_file)
             
-            if not verify_dh_public(peer_dh_pub, peer_sig, peer_elgamal_pub):
+            if not verify_dh_public(peer_dh_pub, peer_sig, peer_elgamal_pub, q, alpha):
                 print("Peer DH offer signature is INVALID. Aborting.")
                 return
                 
-            q, alpha = load_or_generate_dh_params()
             with open(dh_priv_path) as f: dh_priv = int(f.read().strip())
             
             # Compute our own DH public to include in package
@@ -171,7 +172,8 @@ def main():
                 new_master_password=pw,
                 output_vault_path=out_vault_path,
                 my_elgamal_priv=elgamal_priv,
-                q=q
+                q=q,
+                alpha=alpha
             )
             print(f"Vault successfully imported to {out_vault_path}")
 
