@@ -3,15 +3,16 @@ import json
 import os
 import hashlib
 from math import gcd
-from keygen import mod_inverse
 
 #to get SHA-256
-def hash_vault_content(vault_content: str) -> int:
+def hash_vault_content(data) -> int:
     """
-    Compute SHA-256 hash of vault content string.
+    Compute SHA-256 hash of vault content or bytes.
     Returns the hash as a large integer for ElGamal operations.
     """
-    hash_hex = hashlib.sha256(vault_content.encode('utf-8')).hexdigest()
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    hash_hex = hashlib.sha256(data).hexdigest()
     return int(hash_hex, 16)
  
  
@@ -19,84 +20,63 @@ def hash_vault_content(vault_content: str) -> int:
 # CORE MODULE 3 FUNCTIONS
 # ─────────────────────────────────────────────
  
-def sign_vault(vault_content: str, private_key: int, p: int, alpha: int) -> tuple:
+def sign_vault(data, private_key: int, p: int, alpha: int) -> tuple:
     """
-    Sign the vault content using ElGamal digital signature.
+    Sign the data using ElGamal digital signature.
  
     Args:
-        vault_content : the encrypted vault string (from vault.json "encrypted_vault")
+        data          : the data to sign (str or bytes)
         private_key   : ElGamal private key x (from Module 1)
         p             : large prime from config
         alpha         : primitive root modulo p from config
  
     Returns:
         (r, s) signature tuple
- 
-    ElGamal Signing:
-        m = SHA-256(vault_content) as integer
-        pick random k where gcd(k, p-1) == 1
-        r = alpha^k mod p
-        s = k_inverse * (m - x * r) mod (p - 1)
     """
-    # Step 1: Hash the vault content
-    m = hash_vault_content(vault_content)
+    m = hash_vault_content(data)
  
-    # Step 2: Pick a valid random k
+    # Pick a valid random k
     while True:
         k = random.randint(2, p - 2)
         if gcd(k, p - 1) == 1:
             break
  
-    # Step 3: Compute r
     r = pow(alpha, k, p)
  
-    # Step 4: Compute s
-    k_inv = mod_inverse(k, p - 1)
+    # Use built-in pow for modular inverse (Python 3.8+)
+    try:
+        k_inv = pow(k, -1, p - 1)
+    except ValueError:
+        # Fallback if Python version is old or k isn't coprime (though we checked gcd)
+        # For our purposes, pow(k, -1, p-1) is perfectly fine.
+        return sign_vault(data, private_key, p, alpha)
+
     s = (k_inv * (m - private_key * r)) % (p - 1)
  
-    # Edge case: s should not be 0
     if s == 0:
-        return sign_vault(vault_content, private_key, p, alpha)  # retry
+        return sign_vault(data, private_key, p, alpha)
  
     return (r, s)
  
  
-def verify_vault(vault_content: str, signature: tuple, public_key: int, p: int, alpha: int) -> bool:
+def verify_vault(data, signature: tuple, public_key: int, p: int, alpha: int) -> bool:
     """
-    Verify the ElGamal signature of the vault content.
- 
-    Args:
-        vault_content : the encrypted vault string (from vault.json "encrypted_vault")
-        signature     : (r, s) tuple stored in vault.json
-        public_key    : ElGamal public key y (from Module 1)
-        p             : large prime from config
-        alpha         : primitive root modulo p from config
- 
-    Returns:
-        True if signature is valid, False if tampered
- 
-    ElGamal Verification:
-        m = SHA-256(vault_content) as integer
-        left  = alpha^m mod p
-        right = (public_key^r * r^s) mod p
-        valid if left == right
+    Verify the ElGamal signature of the data.
     """
     r, s = signature
  
-    # Basic sanity checks on signature values
     if not (0 < r < p):
         return False
     if not (0 < s < p - 1):
         return False
  
-    # Step 1: Hash the vault content (must match exactly what was signed)
-    m = hash_vault_content(vault_content)
+    m = hash_vault_content(data)
  
-    # Step 2: Compute both sides of the verification equation
     left  = pow(alpha, m, p)
     right = (pow(public_key, r, p) * pow(r, s, p)) % p
  
     return left == right
+
  
  
 # ─────────────────────────────────────────────

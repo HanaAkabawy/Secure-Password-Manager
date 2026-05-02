@@ -1,6 +1,6 @@
 import sys
 import getpass
-from vault import (
+from pwm.vault import (
     create_vault, add_credential, retrieve_credential, 
     list_credentials, update_credential, delete_credential
 )
