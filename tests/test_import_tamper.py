@@ -10,7 +10,7 @@ from pwm.dh_export import (
     SignatureVerificationError, save_dh_params
 )
 from pwm.vault import create_vault, add_credential
-from pwm._mock_elgamal import generate_keypair
+from pwm.elgamal import generatekeypair
 
 def test_tamper_package():
     print("Testing tamper package...")
@@ -27,8 +27,8 @@ def test_tamper_package():
     create_vault(sender_vault_path, "sender_master")
     add_credential(sender_vault_path, "sender_master", "example.com", "user1", "pass1")
     
-    sender_pub, sender_priv = generate_keypair()
-    receiver_pub, receiver_priv = generate_keypair()
+    sender_pub, sender_priv = generatekeypair(q, alpha)
+    receiver_pub, receiver_priv = generatekeypair(q, alpha)
     sender_dh_priv, sender_dh_pub = generate_dh_keypair(q, alpha)
     receiver_dh_priv, receiver_dh_pub = generate_dh_keypair(q, alpha)
     
@@ -72,6 +72,7 @@ def test_tamper_package():
 
 if __name__ == "__main__":
     test_tamper_package()
+
 
 
 

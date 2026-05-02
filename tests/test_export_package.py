@@ -8,7 +8,7 @@ from pwm.dh_export import (
     build_export_package, consume_export_package, save_dh_params
 )
 from pwm.vault import create_vault, add_credential, list_credentials
-from pwm._mock_elgamal import generate_keypair
+from pwm.elgamal import generatekeypair
 
 def test_export_package():
     print("Testing export/import package...")
@@ -28,9 +28,9 @@ def test_export_package():
     add_credential(sender_vault_path, "sender_master", "example.com", "user1", "pass1")
     add_credential(sender_vault_path, "sender_master", "test.com", "user2", "pass2")
     
-    # ElGamal keys (Mock)
-    sender_pub, sender_priv = generate_keypair()
-    receiver_pub, receiver_priv = generate_keypair()
+    # ElGamal keys (using real elgamal gen for testing, not saving files)
+    sender_pub, sender_priv = generatekeypair(q, alpha)
+    receiver_pub, receiver_priv = generatekeypair(q, alpha)
     
     # DH keypairs
     sender_dh_priv, sender_dh_pub = generate_dh_keypair(q, alpha)
@@ -76,6 +76,7 @@ def test_export_package():
 
 if __name__ == "__main__":
     test_export_package()
+
 
 
 

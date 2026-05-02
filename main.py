@@ -10,7 +10,7 @@ from pwm.dh_export import (
     generate_dh_params, generate_dh_keypair, sign_dh_public, verify_dh_public,
     build_export_package, consume_export_package, load_dh_params, save_dh_params
 )
-from pwm._mock_elgamal import load_public, load_private, generate_keypair
+from pwm.elgamal import init as generate_elgamal_params
 
 def get_password():
     return getpass.getpass("Enter Master Password: ")
@@ -22,6 +22,16 @@ def load_or_generate_dh_params():
         if not os.path.exists("pwm"): os.makedirs("pwm")
         save_dh_params(q, alpha, "pwm/dh_params.json")
     return load_dh_params("pwm/dh_params.json")
+
+def load_public(path):
+    if not os.path.exists(path): return 0
+    with open(path, "r") as f:
+        return json.load(f)["publicKey"]
+
+def load_private(path):
+    if not os.path.exists(path): return 0
+    with open(path, "r") as f:
+        return json.load(f)["privateKey"]
 
 def main():
     if len(sys.argv) < 2:
@@ -82,11 +92,14 @@ def main():
 
         elif command == "export-init":
             user = sys.argv[2]
-            elgamal_priv_path = f"{user}_elgamal_priv.key"
+            elgamal_priv_path = f"{user}_elgamal_priv.json"
+            elgamal_pub_path = f"{user}_elgamal_pub.json"
             if not os.path.exists(elgamal_priv_path):
-                pub, priv = generate_keypair()
-                with open(f"{user}_elgamal_pub.key", "w") as f: f.write(pub)
-                with open(elgamal_priv_path, "w") as f: f.write(priv)
+                q_el, a_el, pub, priv = generate_elgamal_params()
+                with open(elgamal_pub_path, "w") as f:
+                    json.dump({"Prime": q_el, "Primitive Root": a_el, "publicKey": pub}, f, indent=4)
+                with open(elgamal_priv_path, "w") as f:
+                    json.dump({"Prime": q_el, "Primitive Root": a_el, "privateKey": priv}, f, indent=4)
             
             q, alpha = load_or_generate_dh_params()
             dh_priv, dh_pub = generate_dh_keypair(q, alpha)
@@ -112,8 +125,8 @@ def main():
             peer_elgamal_pub_file = sys.argv[4]
             
             vault_path = f"{user}_vault.json"
-            elgamal_priv_path = f"{user}_elgamal_priv.key"
-            elgamal_pub_path = f"{user}_elgamal_pub.key"
+            elgamal_priv_path = f"{user}_elgamal_priv.json"
+            elgamal_pub_path = f"{user}_elgamal_pub.json"
             dh_priv_path = f"{user}_dh_priv.key"
             
             q, alpha = load_or_generate_dh_params()
@@ -157,7 +170,7 @@ def main():
             export_file = sys.argv[3]
             sender_elgamal_pub_file = sys.argv[4]
             
-            elgamal_priv_path = f"{user}_elgamal_priv.key"
+            elgamal_priv_path = f"{user}_elgamal_priv.json"
             dh_priv_path = f"{user}_dh_priv.key"
             out_vault_path = f"{user}_vault.json"
             
