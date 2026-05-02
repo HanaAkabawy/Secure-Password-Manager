@@ -4,18 +4,18 @@ import hashlib
 from Crypto.Cipher import AES
 
 def construct_key(master_password: str) -> bytes:
+    # The user would input a varying length password, we use hash to get a fixed length key for AES
     return hashlib.sha256(master_password.encode("utf-8")).digest()
 
-
 def aes_gcm_encrypt(key: bytes, plaintext: bytes) -> bytes:
-    cipher = AES.new(key, AES.MODE_GCM)
+    cipher = AES.new(key, AES.MODE_GCM) #did not specify nonce parameters so that it gets to be random each time
     ciphertext, tag = cipher.encrypt_and_digest(plaintext)
     return cipher.nonce + ciphertext + tag
 
 
 def aes_gcm_decrypt(key: bytes, blob: bytes) -> bytes:
     nonce = blob[:16]
-    tag = blob[-16:]
+    tag = blob[-16:] #last 16 bytes are the authentication tag reserved by how AES GCM works
     ciphertext = blob[16:-16]
     cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
     plaintext = cipher.decrypt_and_verify(ciphertext, tag)
@@ -49,6 +49,7 @@ def _encrypt_and_save(vault_path: str, credentials: list, key: bytes) -> str:
     _write_vault_file(vault_path, vault)
     return blob_hex
 
+#master password is used to derive the same AES key each time 
 
 def create_vault(vault_path: str, master_password: str) -> str:
     key =construct_key(master_password)
@@ -115,6 +116,6 @@ def delete_credential(vault_path: str, master_password: str,
 
 
 def get_encrypted_blob_hex(vault_path: str) -> str:
-    #Return the encrypted_vault hex string from the vault file (for signing)
+    #would be for signing
     vault = _read_vault_file(vault_path)
     return vault["encrypted_vault"] 

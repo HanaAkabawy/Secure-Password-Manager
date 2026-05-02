@@ -60,6 +60,13 @@ def main():
             print(f"\n--- {user.capitalize()}'s Vault ---")
             for c in all_creds:
                 print(f"[{c['website']}] {c['username']}: {c['password']}")
+        elif command == "retrieve":
+            user, site = sys.argv[2], sys.argv[3]
+            path = f"{user}_vault.json"
+            pw = get_password()
+            matches = retrieve_credential(path, pw, site)
+            for m in matches:
+                print(f"Site: {m['website']} | User: {m['username']} | Pass: {m['password']}")
 
         elif command == "update":
             user, site, uname, new_pword = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
