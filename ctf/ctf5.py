@@ -1,4 +1,4 @@
-#  /usr/bin/python3 CTF_DATA/CTF5/ctf5.py
+#  /usr/bin/python3 ctf/ctf5.py
 import requests
 import sys
 
@@ -26,7 +26,7 @@ def oracle(ct):
         return False
 
 # Decrypt block 1
-print("[*] Decrypting block 1...")
+print(" Decrypting block 1...")
 intermediate = bytearray(BLOCK_SIZE)
 
 for byte_index in range(BLOCK_SIZE - 1, -1, -1):
@@ -48,7 +48,7 @@ for byte_index in range(BLOCK_SIZE - 1, -1, -1):
 plaintext1 = bytes(intermediate[i] ^ iv[i] for i in range(BLOCK_SIZE))
 
 # Decrypt block 2
-print("[*] Decrypting block 2...")
+print(" Decrypting block 2...")
 intermediate = bytearray(BLOCK_SIZE)
 
 for byte_index in range(BLOCK_SIZE - 1, -1, -1):
@@ -74,7 +74,7 @@ plaintext = plaintext1 + plaintext2
 padding_len = plaintext[-1]
 
 print()
-print(f"[*] Last byte (padding indicator): 0x{padding_len:02x} ({padding_len})")
+print(f"Last byte (padding indicator): 0x{padding_len:02x} ({padding_len})")
 
 # Validate padding
 if 0 < padding_len <= BLOCK_SIZE:
@@ -82,9 +82,9 @@ if 0 < padding_len <= BLOCK_SIZE:
     all_padding = all(plaintext[-(i+1)] == padding_len for i in range(padding_len))
     if all_padding:
         plaintext = plaintext[:-padding_len]
-        print(f"[+] Valid PKCS7 padding of {padding_len} bytes removed")
+        print(f" + Valid PKCS7 padding of {padding_len} bytes removed")
     else:
-        print("[!] Invalid PKCS7 padding")
+        print("Invalid PKCS7 padding")
 else:
     print("[!] Invalid padding length")
 
@@ -100,8 +100,8 @@ try:
     r = requests.post(f'{BASE_URL}/check_flag', json={"flag": flag}, timeout=10)
     result = r.json()
     if result.get("correct"):
-        print("[✓] FLAG CORRECT!")
+        print("FLAG CORRECT!")
     else:
-        print(f"[!] Incorrect: {result.get('message')}")
+        print(f"Incorrect: {result.get('message')}")
 except Exception as e:
-    print(f"[!] Error: {e}")
+    print(f"Error: {e}")
