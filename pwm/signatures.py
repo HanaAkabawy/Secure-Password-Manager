@@ -104,7 +104,7 @@ def sign_and_save_vault(vault_path: str, private_key: int, p: int, alpha: int):
     with open(vault_path, 'w') as f:
         json.dump(vault_data, f, indent=2)
  
-    print("[✓] Vault signed successfully.")
+    print("[OK] Vault signed successfully.")
  
  
 def verify_and_open_vault(vault_path: str, public_key: int, p: int, alpha: int) -> dict:
@@ -135,5 +135,5 @@ def verify_and_open_vault(vault_path: str, public_key: int, p: int, alpha: int) 
             "      The vault has been tampered with. Refusing to open."
         )
  
-    print("[✓] Vault signature verified. Safe to open.")
+    print("OK] Vault signature verified. Safe to open.")
     return vault_data
