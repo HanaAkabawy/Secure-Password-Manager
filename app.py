@@ -1,6 +1,6 @@
 """
 Flask Web UI for Secure Password Manager — Full Workflow (Modules 1-4)
-Run:  python app.py   →   http://127.0.0.1:5000
+Run:  python app.py   →   http://127.0.0.1:5001
 """
 import os, json, sys, codecs
 sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
@@ -21,14 +21,29 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-def vault_path():
-    return f"{session['user']}_vault.json"
+def get_user_path(user, filename):
+    user_dir = os.path.join("users", user)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return os.path.join(user_dir, filename)
+
+def vault_path(user=None):
+    return get_user_path(user or session['user'], "vault.json")
 
 def priv_path(user=None):
-    return f"{user or session['user']}_private.json"
+    return get_user_path(user or session['user'], "elgamal_priv.json")
 
 def pub_path(user=None):
-    return f"{user or session['user']}_public.json"
+    return get_user_path(user or session['user'], "elgamal_pub.json")
+
+def dh_priv_path(user=None):
+    return get_user_path(user or session['user'], "dh_priv.key")
+
+def dh_offer_path(user=None):
+    return get_user_path(user or session['user'], "dh_offer.json")
+
+def export_pkg_path(user=None):
+    return get_user_path(user or session['user'], "vault_export.json")
 
 def _load_key(path, key_field):
     if not os.path.exists(path): return None, None, None
@@ -173,25 +188,24 @@ details{margin-top:12px} details summary{cursor:pointer;color:#a78bfa;font-size:
       <form method="POST" action="/export-init" style="margin-top:10px">
         <button class="btn-amber" type="submit">Generate DH Offer</button>
       </form>
-      <p class="note">Creates {{ session['user'] }}_dh_offer.json for the recipient.</p>
+      <p class="note">Creates dh_offer.json in your user folder.</p>
     </details>
     <details><summary>Step 2 — Finalize Export</summary>
       <form method="POST" action="/export-finalize" style="margin-top:10px">
-        <label>Peer's DH Offer File <input type="text" name="peer_offer" placeholder="e.g. bob_dh_offer.json" required></label>
-        <label>Peer's ElGamal Public Key File <input type="text" name="peer_pub" placeholder="e.g. bob_public.json" required></label>
+        <label>Peer's Name <input type="text" name="peer_name" placeholder="e.g. bob" required></label>
         <button class="btn-amber" type="submit">Build Export Package</button>
       </form>
+      <p class="note">Looks for dh_offer.json and elgamal_pub.json in peer's folder.</p>
     </details>
   </div>
 
   <!-- Import -->
   <div class="card"><h2>📥 Import Vault (Module 4)</h2>
     <form method="POST" action="/import-vault">
-      <label>Export Package File <input type="text" name="export_file" placeholder="e.g. alice_vault_export.json" required></label>
-      <label>Sender's ElGamal Public Key <input type="text" name="sender_pub" placeholder="e.g. alice_public.json" required></label>
+      <label>Sender's Name <input type="text" name="sender_name" placeholder="e.g. alice" required></label>
       <button class="btn-teal" type="submit">Import</button>
     </form>
-    <p class="note">You will need your own DH offer generated first (Step 1 above).</p>
+    <p class="note">Looks for vault_export.json in sender's folder.</p>
   </div>
 </div>
 {% endif %}
@@ -213,9 +227,9 @@ def index():
 def login():
     user = request.form["user"].strip()
     pw   = request.form["pw"]
-    path = f"{user}_vault.json"
+    path = vault_path(user)
     if not os.path.exists(path):
-        flash("Vault not found. Create one first.", "error")
+        flash(f"Vault for '{user}' not found. Create one first.", "error")
         return redirect(url_for("index"))
     try:
         # Module 3: verify signature before opening
@@ -238,7 +252,7 @@ def login():
 def create():
     user = request.form["user"].strip()
     pw   = request.form["pw"]
-    path = f"{user}_vault.json"
+    path = vault_path(user)
     if os.path.exists(path):
         flash("Vault already exists. Log in instead.", "error")
         return redirect(url_for("index"))
@@ -310,14 +324,14 @@ def export_init():
     try:
         q, alpha = load_or_generate_dh_params()
         dh_priv, dh_pub = generate_dh_keypair(q, alpha)
-        with open(f"{user}_dh_priv.key", "w") as f:
+        with open(dh_priv_path(), "w") as f:
             f.write(str(dh_priv))
         el_priv, el_q, el_alpha = load_private(priv_path())
         sig = sign_dh_public(dh_pub, el_priv, el_q, el_alpha)
         offer = {"dh_pub": hex(dh_pub), "signature": sig}
-        with open(f"{user}_dh_offer.json", "w") as f:
+        with open(dh_offer_path(), "w") as f:
             json.dump(offer, f, indent=2)
-        flash(f"DH Offer saved → {user}_dh_offer.json ✓", "success")
+        flash(f"DH Offer saved inside your user folder ✓", "success")
     except Exception as e:
         flash(f"Error: {e}", "error")
     return redirect(url_for("index"))
@@ -326,29 +340,38 @@ def export_init():
 def export_finalize():
     user = session["user"]
     try:
-        peer_offer_file = request.form["peer_offer"]
-        peer_pub_file   = request.form["peer_pub"]
+        peer_name = request.form["peer_name"].strip()
+        peer_offer_file = dh_offer_path(peer_name)
+        peer_pub_file   = pub_path(peer_name)
+        
+        if not os.path.exists(peer_offer_file):
+            flash(f"Peer offer not found in users/{peer_name}/", "error")
+            return redirect(url_for("index"))
+
         q, alpha = load_or_generate_dh_params()
         with open(peer_offer_file) as f: peer_offer = json.load(f)
         peer_dh_pub = int(peer_offer["dh_pub"], 16)
         peer_sig    = peer_offer["signature"]
         peer_pub, peer_p, peer_a = load_public(peer_pub_file)
+        
         if not verify_dh_public(peer_dh_pub, peer_sig, peer_pub, peer_p, peer_a):
             flash("Peer DH signature INVALID — aborting!", "error")
             return redirect(url_for("index"))
-        with open(f"{user}_dh_priv.key") as f: dh_priv = int(f.read().strip())
+            
+        with open(dh_priv_path()) as f: dh_priv = int(f.read().strip())
         dh_pub = pow(alpha, dh_priv, q)
         el_priv, el_q, el_a = load_private(priv_path())
         el_pub, _, _ = load_public(pub_path())
+        
         pkg = build_export_package(
             vault_path=vault_path(), master_password=session["pw"],
             my_dh_priv=dh_priv, my_dh_pub=dh_pub, peer_dh_pub=peer_dh_pub,
             my_elgamal_priv=el_priv, my_elgamal_pub=el_pub,
             q=q, alpha=alpha, elgamal_p=el_q, elgamal_alpha=el_a
         )
-        out = f"{user}_vault_export.json"
-        with open(out, "w") as f: json.dump(pkg, f, indent=2)
-        flash(f"Export package saved → {out} ✓", "success")
+        
+        with open(export_pkg_path(), "w") as f: json.dump(pkg, f, indent=2)
+        flash(f"Export package created in your user folder ✓", "success")
     except Exception as e:
         flash(f"Error: {e}", "error")
     return redirect(url_for("index"))
@@ -357,12 +380,19 @@ def export_finalize():
 def import_vault():
     user = session["user"]
     try:
-        export_file    = request.form["export_file"]
-        sender_pub_file = request.form["sender_pub"]
+        sender_name = request.form["sender_name"].strip()
+        export_file = export_pkg_path(sender_name)
+        sender_pub_file = pub_path(sender_name)
+        
+        if not os.path.exists(export_file):
+            flash(f"Export package not found in users/{sender_name}/", "error")
+            return redirect(url_for("index"))
+
         q, alpha = load_or_generate_dh_params()
         with open(export_file) as f: pkg = json.load(f)
-        with open(f"{user}_dh_priv.key") as f: dh_priv = int(f.read().strip())
+        with open(dh_priv_path()) as f: dh_priv = int(f.read().strip())
         sender_pub, s_p, s_a = load_public(sender_pub_file)
+        
         consume_export_package(
             package=pkg, my_dh_priv=dh_priv, peer_elgamal_pub=sender_pub,
             new_master_password=session["pw"], output_vault_path=vault_path(),
@@ -380,4 +410,4 @@ def logout():
     return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
